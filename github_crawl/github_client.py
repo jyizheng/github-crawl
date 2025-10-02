@@ -30,6 +30,7 @@ class GitHubGraphQLClient:
 
     def __init__(self, settings: GitHubSettings, client: httpx.AsyncClient | None = None) -> None:
         self._settings = settings
+        self._endpoint = settings.graphql_url.rstrip("/")
         headers = {
             "Accept": "application/vnd.github+json",
             "Content-Type": "application/json",
@@ -38,7 +39,6 @@ class GitHubGraphQLClient:
         if settings.token:
             headers["Authorization"] = f"bearer {settings.token}"
         self._client = client or httpx.AsyncClient(
-            base_url=settings.graphql_url,
             headers=headers,
             timeout=settings.request_timeout,
         )
@@ -63,7 +63,10 @@ class GitHubGraphQLClient:
         while True:
             attempt += 1
             try:
-                response = await self._client.post("", json={"query": query, "variables": variables or {}})
+                response = await self._client.post(
+                    self._endpoint,
+                    json={"query": query, "variables": variables or {}},
+                )
             except httpx.RequestError as exc:
                 LOGGER.warning("GraphQL request error: %s", exc)
                 if attempt >= self._settings.max_retries:
