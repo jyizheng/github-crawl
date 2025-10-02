@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -30,8 +31,7 @@ def _extract_range(query: str) -> tuple[str, str]:
     return start, end
 
 
-@pytest.mark.asyncio
-async def test_range_planner_splits_until_limit():
+def test_range_planner_splits_until_limit():
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = datetime(2024, 1, 5, tzinfo=UTC)
     initial_range = TimeRange(start, end)
@@ -46,18 +46,17 @@ async def test_range_planner_splits_until_limit():
         counts[(pair.start.strftime("%Y-%m-%dT%H:%M:%SZ"), pair.end.strftime("%Y-%m-%dT%H:%M:%SZ"))] = 2000
     for pair in quarters:
         for segment in pair:
-            counts[(segment.start.strftime("%Y-%m-%dT%H:%M:%SZ"), segment.end.strftime("%Y-%m-%dT%H:%M:%SZ"))] = 400
+            counts[(segment.start.strftime("%Y-%m-%dT%H:%M:%SZ"), segment.end.strftime("%Y-%m-%dT%H:%M:%SZ"))] = 600
 
     client = FakeClient(counts)
     planner = RangePlanner(client, search_limit=1000)
-    plans = await planner.plan(initial_range, total_needed=2000)
+    plans = asyncio.run(planner.plan(initial_range, total_needed=2000))
 
     assert sum(plan.requested_results for plan in plans) == 2000
     assert all(plan.available_results <= 1000 for plan in plans)
 
 
-@pytest.mark.asyncio
-async def test_range_planner_respects_total_needed():
+def test_range_planner_respects_total_needed():
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = start + timedelta(days=1)
     initial_range = TimeRange(start, end)
@@ -65,11 +64,25 @@ async def test_range_planner_respects_total_needed():
     key = (start.strftime("%Y-%m-%dT%H:%M:%SZ"), end.strftime("%Y-%m-%dT%H:%M:%SZ"))
     client = FakeClient({key: 800})
     planner = RangePlanner(client, search_limit=1000)
-    plans = await planner.plan(initial_range, total_needed=500)
+    plans = asyncio.run(planner.plan(initial_range, total_needed=500))
+
+
+def test_range_planner_clamps_unsplittable_range(caplog):
+    start = datetime(2025, 10, 2, 5, 54, 1, 358998, tzinfo=UTC)
+    end = datetime(2025, 10, 2, 5, 54, 2, 402525, tzinfo=UTC)
+    initial_range = TimeRange(start, end)
+
+    key = (start.strftime("%Y-%m-%dT%H:%M:%SZ"), end.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    client = FakeClient({key: 274650407})
+    planner = RangePlanner(client, search_limit=1000)
+
+    with caplog.at_level("WARNING"):
+        plans = asyncio.run(planner.plan(initial_range, total_needed=10))
 
     assert len(plans) == 1
-    assert plans[0].requested_results == 500
-    assert plans[0].available_results == 800
+    assert plans[0].requested_results == 10
+    assert plans[0].available_results == 1000
+    assert "clamping to limit" in caplog.text
 
 
 def test_time_range_split_in_half():
