@@ -65,12 +65,12 @@ class RangePlanner:
         """Plan ranges that together yield ``total_needed`` repositories."""
 
         planned: list[RangePlan] = []
-        stack: list[TimeRange] = [initial_range]
+        stack: list[tuple[TimeRange, int | None]] = [(initial_range, None)]
         remaining = total_needed
 
         while stack and remaining > 0:
-            current = stack.pop()
-            count = await self._count(current)
+            current, known_count = stack.pop()
+            count = known_count if known_count is not None else await self._count(current)
             if count == 0:
                 continue
             if count > self._search_limit:
@@ -85,9 +85,15 @@ class RangePlanner:
                     count = self._search_limit
                 else:
                     older, newer = current.split()
-                    stack.append(older)
-                    stack.append(newer)
-                    continue
+                    older_count = await self._count(older)
+                    newer_count = await self._count(newer)
+                    max_available = min(count, self._search_limit)
+                    if older_count + newer_count < max_available:
+                        count = max_available
+                    else:
+                        stack.append((older, older_count))
+                        stack.append((newer, newer_count))
+                        continue
             take = min(count, remaining)
             planned.append(RangePlan(time_range=current, requested_results=take, available_results=count))
             remaining -= take
