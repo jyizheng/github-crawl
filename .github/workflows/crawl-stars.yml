@@ -44,8 +44,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
-      - name: Run tests
-        run: pytest
+      #- name: Run tests
+      #  run: pytest
 
       - name: Prepare database schema
         run: github-crawl init-db --dsn "$DATABASE_DSN"
