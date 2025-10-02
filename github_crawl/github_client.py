@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Iterable
 
 import httpx
@@ -86,6 +87,19 @@ class GitHubGraphQLClient:
                 continue
 
             payload = response.json()
+
+            message = payload.get("message")
+            if message and response.status_code == 403:
+                message_text = str(message)
+                lowered = message_text.lower()
+                if "rate limit" in lowered and attempt < self._settings.max_retries:
+                    delay = _retry_after_seconds(response) or backoff
+                    LOGGER.warning("GitHub GraphQL rate limited: %s", message_text)
+                    await asyncio.sleep(min(delay, self._settings.max_backoff))
+                    backoff = min(max(backoff * 2, delay), self._settings.max_backoff)
+                    continue
+                raise GraphQLClientError(message_text)
+
             errors = payload.get("errors")
             if errors:
                 if _is_retryable(errors) and attempt < self._settings.max_retries:
@@ -129,6 +143,27 @@ def _retry_delay(errors: Iterable[dict[str, Any]]) -> float | None:
             except (TypeError, ValueError):
                 continue
     return None
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    value = response.headers.get("Retry-After")
+    if not value:
+        return None
+    try:
+        return max(float(value), 0.0)
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):  # pragma: no cover - defensive parsing
+        return None
+    if retry_at is None:  # pragma: no cover - defensive clause
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    delta = (retry_at - datetime.now(timezone.utc)).total_seconds()
+    return max(delta, 0.0)
 
 
 def _parse_datetime(value: str | None) -> datetime:
