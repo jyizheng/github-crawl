@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable, Sequence
@@ -9,6 +10,9 @@ from typing import Iterable, Sequence
 from .config import UTC
 from .github_client import GitHubGraphQLClient
 from .graphql_queries import REPOSITORY_COUNT_QUERY
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, frozen=True)
@@ -71,13 +75,19 @@ class RangePlanner:
                 continue
             if count > self._search_limit:
                 if not current.can_split:
-                    raise RuntimeError(
-                        "Cannot split range further but result count exceeds search limit"
+                    LOGGER.warning(
+                        "Search result count %s exceeds limit %s for unsplittable range %s - %s; clamping to limit.",
+                        count,
+                        self._search_limit,
+                        current.start.isoformat(),
+                        current.end.isoformat(),
                     )
-                older, newer = current.split()
-                stack.append(older)
-                stack.append(newer)
-                continue
+                    count = self._search_limit
+                else:
+                    older, newer = current.split()
+                    stack.append(older)
+                    stack.append(newer)
+                    continue
             take = min(count, remaining)
             planned.append(RangePlan(time_range=current, requested_results=take, available_results=count))
             remaining -= take
