@@ -57,44 +57,21 @@ class Database:
                 node_id,
                 database_id,
                 owner_login,
-                owner_type,
                 name,
                 full_name,
-                description,
-                primary_language,
                 stargazer_count,
                 fork_count,
-                open_issue_count,
-                watcher_count,
-                is_private,
-                is_fork,
-                is_archived,
-                created_at,
-                updated_at,
-                pushed_at,
                 fetched_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19
+                $1, $2, $3, $4, $5, $6, $7, $8
             )
             ON CONFLICT (node_id) DO UPDATE SET
                 database_id = EXCLUDED.database_id,
                 owner_login = EXCLUDED.owner_login,
-                owner_type = EXCLUDED.owner_type,
                 name = EXCLUDED.name,
                 full_name = EXCLUDED.full_name,
-                description = EXCLUDED.description,
-                primary_language = EXCLUDED.primary_language,
                 stargazer_count = EXCLUDED.stargazer_count,
                 fork_count = EXCLUDED.fork_count,
-                open_issue_count = EXCLUDED.open_issue_count,
-                watcher_count = EXCLUDED.watcher_count,
-                is_private = EXCLUDED.is_private,
-                is_fork = EXCLUDED.is_fork,
-                is_archived = EXCLUDED.is_archived,
-                created_at = EXCLUDED.created_at,
-                updated_at = EXCLUDED.updated_at,
-                pushed_at = EXCLUDED.pushed_at,
                 fetched_at = EXCLUDED.fetched_at
         """
 
@@ -103,10 +80,8 @@ class Database:
                 repository_node_id,
                 fetched_at,
                 stargazer_count,
-                fork_count,
-                open_issue_count,
-                watcher_count
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                fork_count
+            ) VALUES ($1, $2, $3, $4)
             ON CONFLICT (repository_node_id, fetched_at) DO NOTHING
         """
 
@@ -118,21 +93,10 @@ class Database:
                             record.node_id,
                             record.database_id,
                             record.owner_login,
-                            record.owner_type,
                             record.name,
                             record.full_name,
-                            record.description,
-                            record.primary_language,
                             record.stargazer_count,
                             record.fork_count,
-                            record.open_issue_count,
-                            record.watcher_count,
-                            record.is_private,
-                            record.is_fork,
-                            record.is_archived,
-                            record.created_at,
-                            record.updated_at,
-                            record.pushed_at,
                             record.fetched_at,
                         )
                         for record in chunk
@@ -145,8 +109,6 @@ class Database:
                             record.fetched_at,
                             record.stargazer_count,
                             record.fork_count,
-                            record.open_issue_count,
-                            record.watcher_count,
                         )
                         for record in chunk
                     ]
@@ -159,21 +121,10 @@ class Database:
                 node_id,
                 database_id,
                 owner_login,
-                owner_type,
                 name,
                 full_name,
-                description,
-                primary_language,
                 stargazer_count,
                 fork_count,
-                open_issue_count,
-                watcher_count,
-                is_private,
-                is_fork,
-                is_archived,
-                created_at,
-                updated_at,
-                pushed_at,
                 fetched_at
             FROM github_repositories
             ORDER BY stargazer_count DESC, node_id
@@ -185,21 +136,10 @@ class Database:
                         node_id=row["node_id"],
                         database_id=row["database_id"],
                         owner_login=row["owner_login"],
-                        owner_type=row["owner_type"],
                         name=row["name"],
                         full_name=row["full_name"],
-                        description=row["description"],
-                        primary_language=row["primary_language"],
                         stargazer_count=row["stargazer_count"],
                         fork_count=row["fork_count"],
-                        open_issue_count=row["open_issue_count"],
-                        watcher_count=row["watcher_count"],
-                        is_private=row["is_private"],
-                        is_fork=row["is_fork"],
-                        is_archived=row["is_archived"],
-                        created_at=row["created_at"],
-                        updated_at=row["updated_at"],
-                        pushed_at=row["pushed_at"],
                         fetched_at=row["fetched_at"],
                     )
 
