@@ -8,11 +8,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .config import AppConfig
+from .config import AppConfig, RateLimitInfo
 from .db import Database
 from .github_client import GitHubGraphQLClient
 from .graphql_queries import REPOSITORY_SEARCH_QUERY
 from .models import RepositoryRecord
+from .rate_limiter import RateLimiter
 from .partitioner import RangePlan, RangePlanner, TimeRange
 
 LOGGER = logging.getLogger(__name__)
@@ -36,7 +37,8 @@ class GitHubCrawler:
         self._semaphore = asyncio.Semaphore(config.github.max_concurrency)
         self._seen_ids: set[str] = set()
         self._seen_lock = asyncio.Lock()
-        self._latest_rate_limit: int | None = None
+        self._rate_limiter = RateLimiter()
+        self._latest_rate_limit: RateLimitInfo | None = None
 
     async def crawl(self) -> CrawlResult:
         await self._database.connect()
@@ -66,7 +68,7 @@ class GitHubCrawler:
         LOGGER.info("Crawl finished with %s repositories persisted", written)
         return CrawlResult(
             repositories_written=written,
-            rate_limit_remaining=self._latest_rate_limit,
+            rate_limit_remaining=(self._latest_rate_limit.remaining if self._latest_rate_limit else None),
             finished_at=datetime.now(tz=UTC),
         )
 
@@ -114,10 +116,16 @@ class GitHubCrawler:
             "first": page_size,
             "after": cursor,
         }
-        async with self._semaphore:
-            response = await self._client.execute(REPOSITORY_SEARCH_QUERY, variables)
+        await self._rate_limiter.acquire()
+        try:
+            async with self._semaphore:
+                response = await self._client.execute(REPOSITORY_SEARCH_QUERY, variables)
+        except Exception:
+            await self._rate_limiter.reset()
+            raise
         if response.rate_limit:
-            self._latest_rate_limit = response.rate_limit.remaining
+            await self._rate_limiter.record(response.rate_limit)
+            self._latest_rate_limit = response.rate_limit
         return response.data
 
     async def _consume(self, queue: asyncio.Queue[RepositoryRecord | None]) -> int:

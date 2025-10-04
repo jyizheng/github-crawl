@@ -37,27 +37,10 @@ fragment RepositoryFields on Repository {
   databaseId
   name
   nameWithOwner
-  description
   stargazerCount
   forkCount
-  isPrivate
-  isFork
-  isArchived
-  createdAt
-  updatedAt
-  pushedAt
   owner {
     login
-    __typename
-  }
-  watchers {
-    totalCount
-  }
-  issues(states: OPEN) {
-    totalCount
-  }
-  primaryLanguage {
-    name
   }
 }
 """
